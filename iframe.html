@@ -1,78 +1,75 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <meta name="viewport" content="width=device-width," />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      body {
+      /* Ensure 100% height percentages actually work */
+      html, body {
+        height: 100%;
         margin: 0;
       }
+      body { margin: 0; }
+
+      /* Fill the iframe viewport */
       .container {
         position: relative;
-        width: 100%;
-        height: 0;
-        padding-bottom: 56.25%;
-        height: 100vh;
+        width: 100vw;   /* fill iframe width */
+        height: 100vh;  /* fill iframe height (fallback) */
+        overflow: hidden;
       }
       .video {
         position: absolute;
-        top: 0;
-        left: 0;
+        inset: 0;
         width: 100%;
         height: 100%;
       }
     </style>
   </head>
   <body>
-    <div class="container">
+    <div class="container" id="container">
       <div class="video" id="player"></div>
-      <div style="position: absolute; top: 10px; left: 10px; z-index: 9999; 
-           color: white; background: red; padding: 10px; font-size: 20px;">
-  🚀 USING CUSTOM IFRAME4! 🚀
-</div>
+      <div style="position:absolute;top:10px;left:10px;z-index:9999;color:white;background:red;padding:10px;font-size:20px;">
+        🚀 USING CUSTOM IFRAME5! 🚀
+      </div>
     </div>
 
     <script>
-      const randomPlayerId = 'player' + Date.now();
-      document.getElementById('player').id = randomPlayerId;
+      // --- Keep container exactly the size of the iframe viewport ---
+      const containerEl = document.getElementById('container');
+      function sizeToViewport() {
+        // Use real viewport to avoid mobile 100vh issues
+        containerEl.style.width  = window.innerWidth + 'px';
+        containerEl.style.height = window.innerHeight + 'px';
+      }
+      sizeToViewport();
+      window.addEventListener('resize', sizeToViewport);
+      window.addEventListener('orientationchange', sizeToViewport);
+
+      // --- RN bridge (unchanged) ---
+      function sendMessageToRN(msg) {
+        if (window.ReactNativeWebView?.postMessage) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(msg));
+        }
+      }
 
       const parsedUrl = new URL(window.location.href);
-      const UrlQueryData = parsedUrl.searchParams.get('data');
+      const UrlQueryData = parsedUrl.searchParams.get('data') || '{}';
       const {
-        end,
-        list,
-        color,
-        start,
-        rel_s,
-        loop_s,
-        listType,
-        playerLang,
-        playlist,
-        videoId_s,
-        controls_s,
-        cc_lang_pref_s,
-        contentScale_s,
-        allowWebViewZoom,
-        modestbranding_s,
-        iv_load_policy,
-        preventFullScreen_s,
-        showClosedCaptions_s,
+        end, list, color, start, rel_s, loop_s, listType, playerLang, playlist,
+        videoId_s, controls_s, cc_lang_pref_s, contentScale_s, allowWebViewZoom,
+        modestbranding_s, iv_load_policy, preventFullScreen_s, showClosedCaptions_s,
       } = JSON.parse(UrlQueryData);
 
-      function sendMessageToRN(msg) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(msg));
-      }
-
+      // Viewport meta (slightly tightened)
       let metaString = '';
-      if (contentScale_s) {
-        metaString += `initial-scale=${contentScale_s}, `;
-      }
-
-      if (!allowWebViewZoom) {
-        metaString += `maximum-scale=${contentScale_s}`;
-      }
-
+      if (contentScale_s) metaString += `initial-scale=${contentScale_s}, `;
+      if (!allowWebViewZoom) metaString += `maximum-scale=${contentScale_s}`;
       const viewport = document.querySelector('meta[name=viewport]');
-      viewport.setAttribute('content', 'width=device-width, ' + metaString);
+      if (viewport) viewport.setAttribute('content', 'width=device-width, ' + metaString);
+
+      // YouTube IFrame API
+      const randomPlayerId = 'player' + Date.now();
+      document.getElementById('player').id = randomPlayerId;
 
       var tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
@@ -82,26 +79,15 @@
       var player;
       function onYouTubeIframeAPIReady() {
         player = new YT.Player(randomPlayerId, {
-          width: '1000',
-          height: '1000',
+          // Critical: make the iframe itself flexible
+          width: '100%',
+          height: '100%',
           videoId: videoId_s,
           playerVars: {
-            end: end,
-            rel: rel_s,
-            list: list,
-            color: color,
-            loop: loop_s,
-            start: start,
-            playsinline: 1,
-            hl: playerLang,
-            playlist: playlist,
-            listType: listType,
-            controls: controls_s,
-            fs: preventFullScreen_s,
-            cc_lang_pref: cc_lang_pref_s,
-            iv_load_policy: iv_load_policy,
-            modestbranding: modestbranding_s,
-            cc_load_policy: showClosedCaptions_s,
+            end, rel: rel_s, list, color, loop: loop_s, start,
+            playsinline: 1, hl: playerLang, playlist, listType,
+            controls: controls_s, fs: preventFullScreen_s, cc_lang_pref: cc_lang_pref_s,
+            iv_load_policy, modestbranding: modestbranding_s, cc_load_policy: showClosedCaptions_s,
           },
           events: {
             onReady: onPlayerReady,
@@ -113,26 +99,13 @@
         });
       }
 
-      function onPlayerError(event) {
-        sendMessageToRN({eventType: 'playerError', data: event.data});
-      }
+      function onPlayerError(event) { sendMessageToRN({eventType:'playerError', data:event.data}); }
+      function onPlaybackRateChange(event) { sendMessageToRN({eventType:'playbackRateChange', data:event.data}); }
+      function onPlaybackQualityChange(event) { sendMessageToRN({eventType:'playerQualityChange', data:event.data}); }
+      function onPlayerReady() { sendMessageToRN({eventType:'playerReady'}); }
+      function onPlayerStateChange(event) { sendMessageToRN({eventType:'playerStateChange', data:event.data}); }
 
-      function onPlaybackRateChange(event) {
-        sendMessageToRN({eventType: 'playbackRateChange', data: event.data});
-      }
-
-      function onPlaybackQualityChange(event) {
-        sendMessageToRN({eventType: 'playerQualityChange', data: event.data});
-      }
-
-      function onPlayerReady(event) {
-        sendMessageToRN({eventType: 'playerReady'});
-      }
-
-      function onPlayerStateChange(event) {
-        sendMessageToRN({eventType: 'playerStateChange', data: event.data});
-      }
-
+      // Fullscreen listeners (unchanged)
       var isFullScreen = false;
       function onFullScreenChange() {
         isFullScreen =
@@ -140,49 +113,25 @@
           document.msFullscreenElement ||
           document.mozFullScreenElement ||
           document.webkitFullscreenElement;
-
-        sendMessageToRN({
-          eventType: 'fullScreenChange',
-          data: Boolean(isFullScreen),
-        });
+        sendMessageToRN({ eventType:'fullScreenChange', data:Boolean(isFullScreen) });
       }
-
       document.addEventListener('fullscreenchange', onFullScreenChange);
       document.addEventListener('msfullscreenchange', onFullScreenChange);
       document.addEventListener('mozfullscreenchange', onFullScreenChange);
       document.addEventListener('webkitfullscreenchange', onFullScreenChange);
 
+      // Message bridge (unchanged)
       window.addEventListener('message', function (event) {
-        const {data} = event;
-
+        const { data } = event;
         try {
-          const parsedData = JSON.parse(data);
-          const {eventName, meta} = parsedData;
-
+          const { eventName, meta } = JSON.parse(data);
           switch (eventName) {
-            case 'playVideo':
-              player.playVideo();
-              break;
-
-            case 'pauseVideo':
-              player.pauseVideo();
-              break;
-
-            case 'muteVideo':
-              player.mute();
-              break;
-
-            case 'unMuteVideo':
-              player.unMute();
-              break;
-
-            case 'setVolume':
-              player.setVolume(meta.volume);
-              break;
-
-            case 'setPlaybackRate':
-              player.setPlaybackRate(meta.playbackRate);
-              break;
+            case 'playVideo': player.playVideo(); break;
+            case 'pauseVideo': player.pauseVideo(); break;
+            case 'muteVideo': player.mute(); break;
+            case 'unMuteVideo': player.unMute(); break;
+            case 'setVolume': player.setVolume(meta.volume); break;
+            case 'setPlaybackRate': player.setPlaybackRate(meta.playbackRate); break;
           }
         } catch (error) {
           console.error('Error parsing data', event, error);
